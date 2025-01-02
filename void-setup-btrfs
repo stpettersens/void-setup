@@ -1,0 +1,485 @@
+#!/bin/bash
+# void-setup-btrfs
+# Set up a Void system using chroot.
+#
+# Written by Sam Saint-Pettersen <https://stpettersen.xyz>
+#
+# Based on Jake@Linux's tutorial:
+# https://jpedmedia.com/tutorials/void_install
+#
+# Run under root user.
+
+exit_if_0() {
+    if [[ $1 == "0" ]]; then
+        echo "Goodbye..."
+        exit 0
+    fi
+}
+
+display_logo() {
+    clear
+    tput setaf 2 # Green banner
+    figlet "Void Linux  Setup"
+    tput setaf 7 # White text
+    echo
+    echo "Scripts written by Sam Saint-Pettersen <https://stpettersen.xyz>"
+    echo "Based on and thanks to Jake@Linux's tutorial:"
+    echo "https://jpedmedia.com/tutorials/void_install"
+    echo
+    tput setaf 1 # Red notice
+    echo "BTRFS root filesystem"
+    echo
+    echo "Enter '0' at any further point to exit."
+    echo
+    tput setaf 7 # Back to white text
+}
+
+partition_disk() {
+    display_logo
+    pextra="n"
+    echo "----------------------"
+    echo "(1a) Partition disk"
+    echo "----------------------"
+    echo "Listing block devices:"
+    echo
+    lsblk
+    echo
+    read -p "Enter disk to partition (e.g. /dev/sda): " disk
+    exit_if_0 $disk
+
+    while [[ $boot_scheme != "boot" && $boot_scheme != "efi" ]]; do
+        read -p "Boot partition scheme (boot|efi): " boot_scheme
+        exit_if_0 $boot_scheme
+        read -p "Boot partition size (nM or nG): " boot_size
+        exit_if_0 $boot_size
+    done
+    root_size="-1"
+    while [[ $root_size == "-1" ]]; do
+        read -p "Root partition size ('r' for rest of disk): " root_size
+        exit_if_0 $root_size
+    done
+    if [[ $boot_scheme == "efi" ]]; then
+        boot_partition="${disk}1"
+        (echo g; echo n; echo 1; echo ""; echo "+${boot_size}"; echo t; echo 1; echo w; echo q) | fdisk $disk
+    elif [[ $boot_scheme = "boot" && $root_size == "r" ]]; then
+        boot_partition="${disk}1"
+        (echo o; echo n; echo p; echo 1; echo ""; echo "+${boot_size}"; echo t; echo "0c"; echo w; echo q) | fdisk $disk
+        root_partition="${disk}2"
+        (echo n; echo p; echo 2; echo ""; echo ""; echo w; echo q) | fdisk $disk
+    elif [[ $boot_scheme == "boot" && $root_size != "r" ]]; then
+        boot_partition="${disk}1"
+        (echo o; echo n; echo p; echo 1; echo ""; echo "+${boot_size}"; echo t; echo "0c"; echo w; echo q) | fdisk $disk
+        root_partition="${disk}2"
+        (echo n; echo p; echo 2; echo ""; echo "+${root_size}"; echo w; echo q) | fdisk $disk
+        display_logo
+        read -p "Do you want to create another partition? (y/n): " yn
+        exit_if_0 $yn
+        if [[ $yn == "y" ]]; then
+            extra_name="home"
+            while [[ $extra_name == "home" ]]; do
+                read -p "What do you want to call the other partition (e.g. extra)?: "  extra_name
+            done
+            pextra="y"
+            extra_partition="${disk}3"
+            (echo n; echo p; echo 3; echo ""; echo ""; echo w; echo q) | fdisk $disk
+        fi
+    fi
+    if [[ $boot_scheme == "efi" && $root_size == "r" ]]; then
+        root_partition="${disk}2"
+        (echo n; echo 2; echo ""; echo ""; echo w; echo q) | fdisk $disk
+    elif [[ $boot_scheme == "efi" && $root_size != "r" ]]; then
+        root_partition="${disk}2"
+        (echo n; echo 2; echo ""; echo "+${root_size}"; echo w; echo q) | fdisk $disk
+        display_logo
+        read -p "Do you want to create another partition? (y/n): " yn
+        exit_if_0 $yn
+        if [[ $yn == "y" ]]; then
+            extra_name="home"
+            while [[ $extra_name == "home" ]]; do
+                read -p "What do you want to call the other partition (e.g. extra)?: " extra_name
+            done
+            pextra="y"
+            extra_partition="${disk}3"
+            (echo n; echo 3; echo ""; echo ""; echo w; echo q) | fdisk $disk
+        fi
+    fi
+    display_logo
+    echo "Listing disk partitions:"
+    echo
+    (echo p; echo q) | fdisk $disk
+    echo
+    read -p "Check OK before continuing (y/n): " yn
+    exit_if_0 $yn
+    if [[ $yn == "n" ]]; then
+        exit_if_0 "0"
+    fi
+    echo "disk = ${disk}" >> void.cfg
+    echo "bootp = ${boot_partition}" >> void.cfg
+    echo "bscheme = ${boot_scheme}" >> void.cfg
+    echo "rootp = ${root_partition}" >> void.cfg
+    if [[ $pextra == "y" ]]; then
+        echo "extrap = ${extra_partition}" >> void.cfg
+        echo "extran = ${extra_name}" >> void.cfg
+    fi
+    echo "pextra = ${pextra}" >> void.cfg
+    clear
+}
+
+guided_or_steps_format_disk() {
+    boot_partition=$(grep bootp void.cfg | awk '{print $3}')
+    boot_scheme=$(grep bscheme void.cfg | awk '{print $3}')
+    root_partition=$(grep rootp void.cfg | awk '{print $3}')
+    extra_partition=$(grep extrap void.cfg | awk '{print $3}')
+    extra_name=$(grep extran void.cfg | awk '{print $3}')
+    pextra=$(grep pextra void.cfg | awk '{print $3}')
+    if [[ $pextra == "y" ]]; then
+        echo "Create mountpoint for ${extra_name}..."
+        mkdir -p "/mnt/${extra_name}"
+        sleep 3
+    fi
+    display_logo
+    echo "-------------------------------------------------------"
+    echo "(1b) Use guided format or continue to format partitions"
+    echo "-------------------------------------------------------"
+    echo "Boot partition is ${boot_partition} [will format as FAT32]"
+    echo "Boot scheme is ${boot_scheme^^}"
+    echo "Root partition is ${root_partition} [will format as BTRFS]"
+    if ! [ -z $extra_partition ]; then
+        echo "${extra_name^} partition is ${extra_partition} [will format as BTRFS]"
+    fi
+    echo
+    read -p "Do you want to use guided format (y or n to format via prompts)?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        guided_format_disk
+    else
+        format_disk
+    fi
+}
+
+guided_format_disk() {
+    display_logo
+    boot_partition=$(grep bootp void.cfg | awk '{print $3}')
+    boot_scheme=$(grep bscheme void.cfg | awk '{print $3}')
+    root_partition=$(grep rootp void.cfg | awk '{print $3}')
+    extra_partition=$(grep extrap void.cfg | awk '{print $3}')
+    extra_name=$(grep extran void.cfg | awk '{print $3}')
+    pextra=$(grep pextra void.cfg | awk '{print $3}')
+    echo "-------------------------------------"
+    echo "(2) Format partitions (guided)"
+    echo "-------------------------------------"
+    if [[ $boot_scheme == "efi" ]]; then
+        echo "Formatting EFI partition (FAT32)..."
+        sleep 3
+        mkfs.fat -F32 -n EFI $boot_partition
+        sleep 3
+        mount_efi $boot_partition
+    elif [[ $boot_scheme == "boot" ]]; then
+        echo "Formatting boot partition (FAT32)..."
+        sleep 3
+        mkfs.fat -F32 -n BOOT $boot_partition
+        sleep 3
+        mount_boot $boot_partition
+    fi
+    sleep 3
+    echo "Formatting root partition (BTRFS)..."
+    sleep 3
+    mkfs.btrfs -L root $root_partition
+    sleep 3
+    create_btrfs_subvolumes $root_partition
+    if [[ $pextra == "y" ]]; then
+        echo "Formatting ${extra_name} partition (BTRFS)..."
+        sleep 3
+        mkfs.btrfs -L $extra_name $extra_partition
+        sleep 3
+        create_extra_btrfs $extra_partition $extra_name
+    fi
+    sleep 3
+    clear
+}
+
+format_disk() {
+    display_logo
+    extra_partition=$(grep extrap void.cfg | awk '{print $3}')
+    extra_name=$(grep extran void.cfg | awk '{print $3}')
+    pextra=$(grep pexta void.cfg | awk '{print $3}')
+    echo "-------------------------------------"
+    echo "(2) Format partitions"
+    echo "-------------------------------------"
+    read -p "Enter boot partition to format as FAT32 (e.g. /dev/sda1): " boot_partition
+    exit_if_0 $boot_partition
+    read -p "Enter boot scheme (boot|efi): " boot_scheme
+    exit_if_0 $boot_scheme
+    read -p "Enter root partition (e.g. /dev/sda2): " root_partition
+    exit_if_0 $root_partition
+    if [[ $boot_scheme == "efi" ]]; then
+        echo "Formatting EFI partition (FAT32)..."
+        sleep 3
+        mkfs.fat -F32 -n EFI $boot_partition
+        sleep 3
+        mount_efi $boot_partition
+    elif [[ $boot_scheme == "boot" ]]; then
+        echo "Formatting boot partition (FAT32)..."
+        sleep 3
+        mkfs.fat -F32 -n boot $boot_partition
+        sleep 3
+        mount_boot $boot_partition
+    fi
+    sleep 3
+    echo "Formatting root partition (BTRFS)..."
+    sleep 3
+    mkfs.btrfs -L root $root_partition
+    sleep 3
+    create_btrfs_subvolumes $root_partition
+    if [[ $pextra == "y" ]]; then
+        echo "Formatting ${extra_name} partition (BTRFS)..."
+        sleep 3
+        mkfs.btrfs -L $extra_name $extra_partition
+        sleep 3
+        create_extra_btrfs $extra_partition $extra_name
+    fi
+    sleep 3
+}
+
+create_btrfs_subvolumes() {
+    echo "Mounting root partition (BTRFS)..."
+    BTRFS_OPTS="rw,noatime,compress=zstd;discard=async"
+    mount -o $BTRFS_OPTS $1 /mnt
+    sleep 3
+    echo "Creating BTRFS volumes..."
+    btrfs su cr /mnt/@
+    btrfs su cr /mnt/@home
+    btrfs su cr /mnt/@snapshots
+    sleep 3
+    umount /mnt
+    sleep 3
+    echo "Mounting BTRFS volumes..."
+    mount -o $BTRFS_OPTS,subvol=@ $1 /mnt
+    mkdir -p /mnt/{home,.snapshots}
+    mount -o $BTRFS_OPTS,subvol=@home $1 /mnt/home
+    mount -o $BTRFS_OPTS,subvol=@snapshots $1 /mnt/.snapshots
+    sleep 3
+    echo "Creating BTFS temporary volumes...."
+    mkdir -p /mnt/var/cache
+    btrfs su cr /mnt/var/cache/xbps
+    btrfs su cr /mnt/var/tmp
+    btrfs su cr /mnt/srv
+    sleep 3
+}
+
+create_extra_btrfs() {
+    echo "Mounting ${2} partition (BTRFS)..."
+    BTRFS_OPTS="rw,noatime,compress=zstd;discard=async"
+    sleep 3
+    mount -o $BTRFS_OPTS $1 /mnt/$2
+    sleep 3
+}
+
+mount_efi() {
+    echo "Mounting EFI partition..."
+    mkdir -p /mnt/efi
+    mount -o rw,noatime $1 /mnt/efi
+}
+
+mount_boot() {
+    echo "Mounting boot partition..."
+    mkdir -p /mnt/boot
+    mount -o rw,noatime $1 /mnt/boot
+}
+
+review_mountpoints() {
+    display_logo
+    echo "-------------------------------------"
+    echo "(3) Review mountpoints"
+    echo "-------------------------------------"
+    echo "Listing block devices:"
+    echo
+    lsblk
+    echo
+    read -p "Review mountpoints and continue if OK (y/n): " yn
+    exit_if_0 $yn
+    if [[ $yn == "n" ]]; then
+        exit_if_0 "0"
+    fi
+    clear
+}
+
+download_repo_mirrors_file() {
+    wget -q https://playbooks.stpettersen.xyz/void-mirrors.csv
+}
+
+select_repo_mirror() {
+    clear && tput setaf 2 && figlet "Void Linux  Setup" && tput setaf 7
+    cregion=$(grep cregion void.cfg | awk '{print $3}')
+    ccountry=$(grep country void.cfg | awk '{print $3}')
+    ccity=$(grep city void.cfg | awk '{print $3}')
+    echo "-----------------------------------------------"
+    echo "(4) Select repository mirror to use"
+    echo "-----------------------------------------------"
+    declare -a mirrors
+    INPUT=void-mirrors.csv
+    OLDIFS=$IFS
+    IFS=','
+    echo "Available mirrors:"
+    echo
+    matches=""
+    recommended=""
+    [ ! -f $INPUT ] && { echo "$INPUT file not found"; exit -1; }
+    while read url region city country
+    do
+        mirrors+=($url)
+        if [[ $region == $cregion ]]; then
+            matches=$region
+            recommended=$url
+        fi
+        if [[ $country == $ccountry ]]; then
+            matches=$country
+            recommended=$url
+        fi
+        if ! [ -z $city ]; then
+            if [[ $city == *"${ccity}"* ]]; then
+                matches="${city} ${country}"
+                recommended=$url
+                break
+            fi
+        fi
+    done < $INPUT
+    # Broad region matches:
+    if [[ $matches == "Europe" ]]; then
+        recommended="${mirrors[1]}" # Use Frankfurt mirror if only matched to Europe.
+    elif [[ $matches == "America" ]]; then
+        recommended="${mirrors[2]}" # Use Chicago mirror if only matched to America.
+    elif [[ $matches == "Asia" ]]; then
+        recommended="${mirrors[10]}" # Use Tokyo mirror if only matched to Asia.
+    elif [[ $matches == "Australia" || $cregion == "Pacific" ]]; then
+        # Timezone categorizes Australia the country as part of region Australia
+        # and New Zealand as part of the Pacific; so map Pacific to Australian mirror.
+        # There aren't any mirrors for the Pacific region as of writing this script.
+        recommended="${mirrors[26]}" # Use Canberra mirror if only matched to Australia or Pacific.
+        if [[ $cregion == "Pacific" ]]; then
+            matches="Australia"
+        fi
+    fi
+    i=1
+    while read url region city country
+    do
+        echo "($i) $url (Region: $region) (Location: $city $country)"
+        ((i=i+1))
+    done < $INPUT
+    IF=$OLDIFS
+    echo
+    if ! [ -z $recommended ]; then
+        mirror=$recommended
+    else
+        # Use the CDN mirror, in the unlikely event that no recommended mirror was selected.
+        # To be honest, it seems to be a pretty decent mirror for me in the UK.
+        # I tend to use that or the Frankfurt mirror.
+        # Also do this if the -s/--skip-location switch was used with void-setup.
+        mirror="${mirrors[2]}"
+    fi
+    if ! [ -z $matches ]; then
+        echo "Selected mirror: ${mirror} (You are in ${ccity} ${ccountry} - best matches ${matches})"
+    else
+        echo "Selected mirror: ${mirror}"
+    fi
+    echo
+    read -p "Change mirror? (y/n): " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        read -p "Select a mirror to use by number (e.g. 1): " mirror
+        exit_if_0 $mirror
+        mirror="${mirrors[$(($mirror-1))]}"
+        echo
+        echo "Selected mirror: ${mirror}"
+        sleep 3
+    fi
+    echo "mirror = ${mirror}" >> void.cfg
+    clear
+}
+
+set_architecture() {
+    arch=$(lscpu | grep Architecture | awk '{print $2}')
+    echo "arch = ${arch}" >> void.cfg
+}
+
+use_mainline_kernel() {
+    display_logo
+    echo "-----------------------------------------------"
+    echo "(5) Use Linux mainline kernel?"
+    echo "-----------------------------------------------"
+    echo "Do you want to use the latest mainline kernel (linux-mainline)"
+    read -p "(recommended for expert users only) [y/n]?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        echo "mainline = y" >> void.cfg
+    else
+        echo "mainline = n" >> void.cfg
+    fi
+    clear
+}
+
+install_base_system() {
+    display_logo
+    wifi=$(grep wifi void.cfg | awk '{print $3}')
+    disk=$(grep disk void.cfg | awk '{print $3}')
+    mirror=$(grep mirror void.cfg | awk '{print $3}')
+    arch=$(grep arch void.cfg | awk '{print $3}')
+    mainline=$(grep mainline void.cfg | awk '{print $3}')
+    linux="linux"
+    if [[ $mainline == "y" ]]; then
+        linux="linux-mainline"
+    fi
+    echo "-----------------------------------------------"
+    echo "(6) Install base system"
+    echo "-----------------------------------------------"
+    read -p "Install the base system now? (y/n): " yn
+    exit_if_0 $yn
+    if [[ $yn == "n" ]]; then
+        exit_if_0 "0"
+    fi
+    repo="${mirror}/current"
+    mkdir -p /mnt/var/db/xbps/keys
+    cp -f /var/db/xbps/keys/* /mnt/var/db/xbps/keys/
+    if [[ $arch == "x86_64" ]]; then
+        XBPS_ARCH=$arch xbps-install -Sy -R "$repo" -r /mnt base-system "${linux}" vim figlet wget grub
+        if [[ $wifi == "y" ]]; then
+            XBPS_ARCH=$arch xbps-install -Sy -R "$repo" -r /mnt wpa_supplicant
+        fi
+    elif [[ $arch == "aarch64" ]]; then
+        xbps-install -Sy -R "$repo" -r /mnt base-system "${linux}" vim figlet wget grub
+        if [[ $wifi == "y" ]]; then
+            xbps-install -Sy -R "$repo" -r /mnt wpa_supplicant
+        fi
+    fi
+    clear
+}
+
+finish() {
+    display_logo
+    wifi=$(grep wifi void.cfg | awk '{print $3}')
+    echo "-----------------------------------------------"
+    echo "(7) Entering chroot to finish setup"
+    echo "-----------------------------------------------"
+    for dir in dev proc sys run; do mount --rbind /$dir /mnt/$dir; mount --make-rslave /mnt/$dir; done
+    if [[ $wifi == "y" ]]; then
+        mkdir -p /mnt/etc/wpa_supplicant
+        cp -f /etc/wpa_supplicant/wpa_supplicant.conf /mnt/etc/wpa_supplicant/
+    fi
+    cp -f /etc/resolv.conf /mnt/etc/
+    cp -f void.cfg /mnt/ 2>/dev/null
+    wget -q https://playbooks.stpettersen.xyz/void-chroot-btrfs
+    cp -f void-chroot /mnt/void-chroot-btrfs
+    chmod +x /mnt/void-chroot-btrfs
+    echo "Done. Entering the chroot environment. Run './void-chroot-btrfs' to continue:"
+    PS1='(chroot) # ' chroot /mnt/ /bin/bash
+}
+
+partition_disk
+guided_or_steps_format_disk
+review_mountpoints
+download_repo_mirrors_file
+select_repo_mirror
+set_architecture
+use_mainline_kernel
+install_base_system
+finish

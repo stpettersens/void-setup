@@ -1,0 +1,69 @@
+#!/bin/bash
+# void-setup-btrfs-encrypt
+# Set up a Void system using chroot.
+#
+# Based on Jake@Linux's tutorial:
+# https://jpedmedia.com/tutorials/void_install
+#
+# Run under root user.
+
+exit_if_0() {
+    if [[ $1 == "0" ]]; then
+        echo "Goodbye..."
+        exit 0
+    fi
+}
+
+display_logo() {
+    clear
+    tput setaf 2 # Green banner
+    figlet "Void Linux  Setup"
+    tput setaf 1 # Red notice
+    echo
+    echo "BTRFS encrypted root filesystem"
+    echo
+    echo "Enter '0' at any further point to exit."
+    echo
+    tput setaf 7 # Back to white text
+}
+
+partition_disk() {
+}
+
+format_disk() {
+}
+
+create_btrfs_subvolumes() {
+
+
+mount_efi() {
+
+}
+
+mount_boot() {
+
+}
+
+review_mountpoints() {
+
+}
+
+download_repo_mirrors_file() {
+
+}
+
+select_repo_mirror() {
+
+}
+
+set_architecture() {
+
+}
+
+install_base_system() {
+
+}
+
+finish() {
+
+}

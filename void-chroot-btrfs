@@ -1,0 +1,342 @@
+#!/bin/bash
+# void-chroot-btrfs
+# Set up a Void system using chroot.
+#
+# Based on Jake@Linux's tutorial:
+# https://jpedmedia.com/tutorials/void_install
+#
+# Run under root user.
+
+exit_if_0() {
+    if [[ $1 == "0" ]]; then
+        echo "Goodbye..."
+        exit 0
+    fi
+}
+
+display_logo() {
+    tput setaf 2 # Green banner
+    figlet "Void Linux  Setup"
+    tput setaf 7 # White text
+    echo
+    echo "Scripts written by Sam Saint-Pettersen <https://stpettersen.xyz>"
+    echo "Based on and thanks to Jake@Linux's tutorial:"
+    echo "https://jpedmedia.com/tutorials/void_install"
+    echo
+    tput setaf 1 # Red notice
+    echo "BTRFS root filesystem"
+    echo
+    echo "Enter '0' at any further point to exit."
+    echo
+    tput setaf 7 # Back to white text
+}
+
+run_wpa_supplicant_srv() {
+    clear
+    wifi=$(grep wifi void.cfg | awk '{print $3}')
+    if [[ $wifi == "y" ]]; then
+        ln -s /etc/sv/wpa_supplicant /var/service
+    fi
+    clear
+}
+
+set_mirror() {
+    repo=$(grep mirror void.cfg | awk '{print $3}')
+    mkdir -p /etc/xbps.d
+    cp -f /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
+    sed -i "s|https://repo-default.voidlinux.org|${repo}|g" /etc/xbps.d/*-repository-*.conf
+    xbps-install -S
+    sleep 3
+    clear
+}
+
+sync_repos() {
+    xbps-install -Sy
+    clear
+}
+
+set_timezone() {
+    clear
+    display_logo
+    tz=$(grep tz void.cfg | awk '{print $3}')
+    dtz=$(grep dtz void.cfg | awk '{print $3}')
+    if [[ -z $tz ]]; then
+        tz=$dtz
+        echo "tz = ${dtz}" >> void.cfg
+    fi
+    echo "-----------------------------------"
+    echo "(1) Set timezone"
+    echo "-----------------------------------"
+    echo "Listing timezones:"
+    echo
+    ls /usr/share/zoneinfo
+    echo
+    read -p "Change timezone to use (currently '${tz}') [y/n]?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        old_tz=$tz
+        read -p "Which timezone?: " tz
+        exit_if_0 $tz
+        sed -i "s|${old_tz}|${tz}|g" void.cfg
+    fi
+    ln -sf /usr/share/zoneinfo/$tz /etc/localtime
+    echo
+    echo "Time is now: $(date)."
+    sleep 3
+    clear
+}
+
+set_locale() {
+    display_logo
+    locale=$(grep locale void.cfg | awk '{print $3}')
+    echo "------------------------------------"
+    echo "(2) Set locale"
+    echo "------------------------------------"
+    read -p "Change the locale (currently '${locale}') [y/n]?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        old_locale=$locale
+        read -p "Which locale?: " locale
+        exit_if_0 $locale
+        sed -i "s/${old_locale}/#${old_locale}/" /etc/default/libc-locales
+        sed -i "s/${old_locale}/${locale}/g" void.cfg
+    fi
+    sed -i "s/#${locale}/${locale}/" /etc/default/libc-locales
+    xbps-reconfigure -f glibc-locales
+    sleep 3
+    clear
+}
+
+set_hostname() {
+    display_logo
+    echo "------------------------------------"
+    echo "(3) Set hostname"
+    echo "------------------------------------"
+    read -p "Enter hostname: " hostname
+    exit_if_0 $hostname
+    echo $hostname > /etc/hostname
+
+    # Generate hosts file:
+    echo "127.0.0.1    localhost" > /etc/hosts
+    echo "::1          localhost" >> /etc/hosts
+    echo "127.0.0.1    ${hostname}.localdomain ${hostname}" >> /etc/hosts
+    echo "" >> /etc/hosts
+
+    hostname=$(hostname)
+    server=$(grep faml-srv /etc/hosts)
+    if [[ -z $server && $hostname != "faml-srv" ]]; then
+        echo "192.168.0.25 faml-srv" >> /etc/hosts
+        echo "192.168.0.25 faml-srv.www" >> /etc/hosts
+    fi
+
+    playbooks=$(grep playbooks void.cfg | awk '{printf ("%s %s", $3, $4)}')
+    pbs=$(grep play.books /etc/hosts)
+    if [[ -z $pbs ]]; then
+        echo "${playbooks}" >> /etc/hosts
+    fi
+    clear
+}
+
+set_root_pwd_set_sh() {
+    display_logo
+    echo "------------------------------------"
+    echo "(4) Set root password"
+    echo "------------------------------------"
+    echo "Enter a password for root user: "
+    passwd
+    chsh -s /bin/bash root
+    sleep 3
+    clear
+}
+
+add_user() {
+    display_logo
+    echo "------------------------------------"
+    echo "(5) Add a new user"
+    echo "------------------------------------"
+    read -p "Enter username: " user
+    exit_if_0 $user
+    useradd $user
+    echo "Enter password for ${user}: "
+    passwd $user
+    usermod -aG wheel $user
+    usermod -aG tty $user
+    usermod -aG audio $user
+    usermod -aG video $user
+    echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/$user
+    echo "#${user} ALL=(ALL:ALL) ALL" >> /etc/sudoers.d/$user
+    echo
+    echo "User ${user} is member of following groups:"
+    echo
+    groups $user
+    sleep 3
+    clear
+}
+
+guided_or_steps_populate_fstab() {
+    display_logo
+    boot_partition=$(grep bootp void.cfg | awk '{print $3}')
+    boot_scheme=$(grep bscheme void.cfg | awk '{print $3}')
+    root_partition=$(grep rootp void.cfg | awk '{print $3}')
+    extra_partition=$(grep extrap void.cfg | awk '{print $3}')
+    extra_name=$(grep extran void.cfg | awk '{print $3}')
+    echo "-----------------------------------------------------"
+    echo "(6) Use guided populate or continue to populate fstab"
+    echo "-----------------------------------------------------"
+    echo "Boot partition is ${boot_partition}"
+    echo "Boot scheme is ${boot_scheme^^}"
+    echo "Root partition is ${root_partition}"
+    if ! [ -z $extra_partition ]; then
+        echo "${extra_name} partition is ${extra_partition}"
+    fi
+    echo
+    read -p "Do you want to use guided fstab population (y or n to populate via prompts)?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        clear
+        guided_populate_fstab
+    else
+        clear
+        populate_fstab
+    fi
+}
+
+guided_populate_fstab() {
+    display_logo
+    boot_partition=$(grep bootp void.cfg | awk '{print $3}')
+    boot_scheme=$(grep bscheme void.cfg | awk '{print $3}')
+    root_partition=$(grep rootp void.cfg | awk '{print $3}')
+    extra_partition=$(grep extrap void.cfg | awk '{print $3}')
+    extra_name=$(grep extran void.cfg | awk '{print $3}')
+    echo "------------------------------------"
+    echo "(7) Populate fstab (guided)"
+    echo "------------------------------------"
+    echo "Populating fstab..."
+    BOOT_UUID=$(blkid -s UUID -o value $boot_partition)
+    ROOT_UUID=$(blkid -s UUID -o value $root_partition)
+    BTRFS_OPTS="rw,noatime,compress=zstd,discard=async"
+    echo "UUID=${ROOT_UUID} / btrfs ${BTRFS_OPTS},subvol=@ 0 1" > /etc/fstab
+    echo "UUID=${ROOT_UUID} /home btrfs ${BTRFS_OPTS},subvol=@home 0 2" >> /etc/fstab
+    echo "UUID=${ROOT_UUID} /.snapshots btrfs ${BTRFS_OPTS},subvol=@snapshots 0 2" >> /etc/fstab
+    if ! [ -z $extra_partition  ]; then
+        EXTRA_UUID=$(blkid -s UUID -o value $extra_partition)
+        echo "UUID=${EXTRA_UUID} /${extra_name} btrfs ${BTRFS_OPTS} 0 2" >> /etc/fstab
+    fi
+    if [[ $boot_scheme == "efi" ]]; then
+        echo "UUID=${BOOT_UUID} /efi vfat defaults,noatime 0 2" >> /etc/fstab
+    elif [[ $boot_scheme == "boot" ]]; then
+        echo "UUID=${BOOT_UUID} /boot vfat defaults,noatime 0 2" >> /etc/fstab
+    fi
+    echo "tmpfs /tmp tmpfs defaults,nosuid,nodev 0 0" >> /etc/fstab
+    sleep 3
+    clear
+}
+
+populate_fstab() {
+    display_logo
+    extra_partition=$(grep extrap void.cfg | awk '{print $3}')
+    extra_name=$(grep extran void.cfg | awk '{print $3}')
+    echo "------------------------------------"
+    echo "(7) Populate fstab"
+    echo "------------------------------------"
+    read -p "Enter boot partition (e.g. /dev/sda1): " boot_partition
+    exit_if_0 $boot_partition
+    read -p "Enter boot partition scheme (boot|efi): " boot_scheme
+    exit_if_0 $boot_scheme
+    read -p "Enter root partition (e.g. /dev/sda2): " root_partition
+    exit_if_0 $root_partition
+    BOOT_UUID=$(blkid -s UUID -o value $boot_partition)
+    ROOT_UUID=$(blkid -s UUID -o value $root_partition)
+    BTRFS_OPTS="rw,noatime,compress=zstd,discard=async"
+    echo "UUID=${ROOT_UUID} / btrfs ${BTRFS_OPTS},subvol=@ 0 1" > /etc/fstab
+    echo "UUID=${ROOT_UUID} /home btrfs ${BTRFS_OPTS},subvol=@home 0 2" >> /etc/fstab
+    echo "UUID=${ROOT_UUID} /.snapshots btrfs ${BTRFS_OPTS},subvol=@snapshots 0 2" >> /etc/fstab
+    if ! [ -z $extra_partition  ]; then
+        EXTRA_UUID=$(blkid -s UUID -o value $extra_partition)
+        echo "UUID=${EXTRA_UUID} /${extra_name} btrfs ${BTRFS_OPTS} 0 2" >> /etc/fstab
+    fi
+    if [[ $boot_scheme == "efi" ]]; then
+        echo "UUID=${BOOT_UUID} /efi vfat defaults,noatime 0 2" >> /etc/fstab
+    elif [[ $boot_scheme == "boot" ]]; then
+        echo "UUID=${BOOT_UUID} /boot vfat defaults,noatime 0 2" >> /etc/fstab
+    fi
+    echo "tmpfs /tmp tmpfs defaults,nosuid,nodev 0 0" >> /etc/fstab
+    clear
+}
+
+install_bootloader() {
+    display_logo
+    disk=$(grep disk void.cfg | awk '{print $3}')
+    boot_partition=$(grep bootp void.cfg | awk '{print $3}')
+    boot_scheme=$(grep bscheme void.cfg | awk '{print $3}')
+    arch=$(grep arch void.cfg | awk '{print $3}')
+    osprober=$(grep osprober void.cfg | awk '{print $3}')
+    echo "------------------------------------"
+    echo "(8) Install bootloader"
+    echo "------------------------------------"
+    read -p "Install bootloader to disk '${disk}' now (y/n)?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "n" ]]; then
+        exit_if_0 "0"
+    fi
+    if [[ $osprober == "y" ]]; then
+        echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
+    fi
+    if [[ $boot_scheme == "efi" ]]; then
+        if [[ $arch == "x86_64" ]]; then
+            xbps-install -Sy grub-$arch-efi
+        elif [[ $arch == "aarch64" ]]; then
+            xbps-install -Sy grub-arm64-efi
+        fi
+        mkdir -p /efi
+        mount -o rw,noatime $boot_partition /efi
+        if [[ $arch == "x86_64" ]]; then
+            grub-install --target=$arch-efi --efi-directory=/efi --bootloader-id="Void"
+        elif [[ $arch == "aarch64" ]]; then
+            grub-install --target=arm64-efi --efi-directory=/efi --bootloader-id="Void"
+        fi
+    elif [[ $boot_scheme == "boot" ]]; then
+        mkdir -p /boot/grub
+        grub-install "${disk}"
+        sleep 3
+        grub-mkconfig -o /boot/grub/grub.cfg
+        sleep 5
+    fi
+    clear
+}
+
+link_services() {
+    ln -s /etc/sv/dhcpd-eth0 /var/service
+    ln -s /etc/sv/dhcpcd /var/service/
+    clear
+}
+
+xbps_reconfigure() {
+    xbps-reconfigure -fa
+    sleep 3
+    clear
+}
+
+finish() {
+    display_logo
+    echo "-----------------------------------------------"
+    echo "(9) Finishing base system setup"
+    echo "-----------------------------------------------"
+    echo "Run 'exit' and then 'reboot':"
+    rm -f void.cfg # Delete setup config.
+    rm -- "$0" # Delete this script itself.
+}
+
+run_wpa_supplicant_srv
+set_mirror
+sync_repos
+set_timezone
+set_locale
+set_hostname
+set_root_pwd_set_sh
+add_user
+guided_or_steps_populate_fstab
+install_bootloader
+link_services
+xbps_reconfigure
+finish

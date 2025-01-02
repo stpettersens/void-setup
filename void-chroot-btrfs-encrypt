@@ -1,0 +1,266 @@
+#!/bin/bash
+# void-chroot-btrfs-encrypt
+# Set up a Void system using chroot.
+#
+# Based on Jake@Linux's tutorial:
+# https://jpedmedia.com/tutorials/void_install
+#
+# Run under root user.
+# Run bash void-setup first
+# Usage in the chroot:
+# ./void-chroot-btrfs-encrypt OR bash void-chroot-btrfs-encrypt
+
+exit_if_0() {
+    if [[ $1 == "0" ]]; then
+        echo "Goodbye..."
+        exit 0
+    fi
+}
+
+display_logo() {
+    tput setaf 2 # Green banner
+    figlet "Void Linux  Setup"
+    tput setaf 1 # Red notice
+    echo
+    echo "Enter '0' at any further point to exit."
+    echo
+    tput setaf 7 # Back to white text
+}
+
+run_wpa_supplicant_srv() {
+    clear
+    display_logo
+    echo "----------------------------------"
+    echo "(1) Enable wpa_supplicants service"
+    echo "----------------------------------"
+    read -p "Do you want to enable wpa_supplicant (using WiFi)? " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        ln -s /etc/sv/wpa_supplicant /var/service
+    fi
+    clear
+}
+
+set_mirror() {
+    repo=$(head -n 1 mirror_file)
+    mkdir -p /etc/xbps.d
+    cp -f /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
+    sed -i "s|https://repo-default.voidlinux.org|${repo}|g" /etc/xbps.d/*-repository-*.conf
+    xbps-install -S
+    sleep 3
+    rm mirror_file
+    clear
+}
+
+set_timezone() {
+    display_logo
+    echo "-----------------------------------"
+    echo "(2) Set timezone"
+    echo "-----------------------------------"
+    echo "Listing timezones:"
+    echo
+    ls /usr/share/zoneinfo
+    echo
+    read -p "Enter timezone to use (e.g. Europe/London): " tz
+    exit_if_0 $tz
+    ln -sf /usr/share/zoneinfo/$tz /etc/localtime
+    echo
+    echo "Time is now: $(date)."
+    sleep 3
+    clear
+}
+
+set_locale() {
+    display_logo
+    echo "------------------------------------"
+    echo "(3) Set locale"
+    echo "------------------------------------"
+    read -p "Enter the locale (e.g. en_US or 's' to skip): " locale
+    exit_if_0 $locale
+    if [[ $locale == "s" ]]; then
+        return
+    fi
+    sed -i "s/#${locale}/${locale}/" /etc/default/libc-locales
+    xbps-reconfigure -f glibc-locales
+    sleep 3
+    clear
+}
+
+set_hostname() {
+    display_logo
+    echo "------------------------------------"
+    echo "(4) Set hostname"
+    echo "------------------------------------"
+    read -p "Enter hostname: " hostname
+    exit_if_0 $hostname
+    echo $hostname > /etc/hostname
+    echo "127.0.0.1    localhost" > /etc/hosts
+    echo "::1          localhost" >> /etc/hosts
+    echo "127.0.0.1    ${hostname}.localdomain ${hostname}" >> /etc/hosts
+    clear
+}
+
+set_root_pwd_set_sh() {
+    display_logo
+    echo "------------------------------------"
+    echo "(5) Set root password"
+    echo "------------------------------------"
+    echo "Enter a password for root user: "
+    passwd
+    chsh -s /bin/bash root
+    sleep 3
+    clear
+}
+
+add_user() {
+    display_logo
+    echo "------------------------------------"
+    echo "(6) Add a new user"
+    echo "------------------------------------"
+    read -p "Enter username: " user
+    exit_if_0 $user
+    useradd $user
+    echo "Enter password for ${user}: "
+    passwd $user
+    usermod -aG wheel $user
+    usermod -aG tty $user
+    usermod -aG audio $user
+    usermod -aG video $user
+    echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/$user
+    echo "#${user} ALL=(ALL:ALL) ALL" >> /etc/sudoers.d/$user
+    echo
+    echo "User ${user} is member of following groups:"
+    echo
+    groups $user
+    sleep 3
+    clear
+}
+
+sync_repos() {
+    xbps-install -Sy
+    clear
+}
+
+populate_fstab() {
+    display_logo
+    echo "------------------------------------"
+    echo "(7) Populate fstab"
+    echo "------------------------------------"
+    read -p "Enter boot partition (e.g. /dev/sda1): " boot_partition
+    exit_if_0 $boot_partition
+    read -p "Enter boot partition scheme (boot|efi): " boot_scheme
+    exit_if_0 $boot_scheme
+    BOOT_UUID=$(blkid -s UUID -o value $boot_partition)
+    ROOT_UUID=$(blkid -s UUID -o value /dev/mapper/cryptvoid)
+    BTRFS_OPTS="rw,noatime,compress=zstd,discard=async"
+    echo "UUID=${ROOT_UUID} / btrfs ${BTRFS_OPTS},subvol=@ 0 1" > /etc/fstab
+    echo "UUID=${ROOT_UUID} /home btrfs ${BTRFS_OPTS},subvol=@home 0 2" >> /etc/fstab
+    echo "UUID=${ROOT_UUID} /.snapshots btrfs ${BTRFS_OPTS},subvol=@snapshots 0 2" >> /etc/fstab
+    if [[ $boot_scheme == "efi" ]]; then
+        echo "UUID=${BOOT_UUID} /efi vfat defaults,noatime 0 2" >> /etc/fstab
+    elif [[ $boot_scheme == "boot" ]]; then
+        echo "UUID=${BOOT_UUID} /boot vfat defaults,noatime 0 2" >> /etc/fstab
+    fi
+    echo "tmpfs /tmp tmpfs defaults,nosuid,nodev 0 0" >> /etc/fstab
+    clear
+}
+
+install_bootloader() {
+    display_logo
+    echo "------------------------------------"
+    echo "(8) Install bootloader"
+    echo "------------------------------------"
+    read -p "Enter system architecture (x86_64|aarch64): " arch
+    exit_if_0 $arch
+    read -p "Enter system disk (e.g. /dev/sda): " disk
+    exit_if_0 $disk
+    read -p "Enter boot partition scheme (boot|efi): " boot_scheme
+    exit_if_0 $boot_scheme
+    read -p "Enter root partition (e.g. /dev/sda2): " root_partition
+    exit_if_0 $root_partition
+    if [[ $boot_scheme == "efi" ]]; then
+        if [[ $arch == "x86_64" ]]; then
+            xbps-install grub-$arch-efi
+        elif [[ $arch == "aarch64" ]]; then
+            xbbps-install grub-arm64-efi
+        fi
+    elif [[ $boot_scheme == "boot" ]]; then
+        xbps-install grub
+    fi
+    sleep 3
+    echo "GRUB_ENABLE_CRYPTODISK=y" >> /etc/default/grub
+    sed -i "s/loglevel=4/loglevel=4 rd.auto=1 rd.luks.allow-discards/" /etc/default/grub
+    create_keyfile $root_partition
+    finalize_crypt $root_partition
+    if [[ $boot_scheme == "efi" ]]; then
+        mkdir -p /efi
+        mount -o rw,noatime $boot_partition /efi
+        if [[ $arch == "x86_64" ]]; then
+            grub-install --target=$arch-efi --efi-directory=/efi --bootloader-id="Void"
+        elif [[ $arch == "aarch64" ]]; then
+            grub-install --target=arm64-efi --efi-directory=/efi --bootloader-id="Void"
+        fi
+    elif [[ $boot_scheme == "boot" ]]; then
+        mkdir -p /boot
+        mount -o rw,noatime $boot_partition /boot
+        grub-install $disk --bootloader-id="Void"
+    fi
+    sleep 3
+    clear
+}
+
+create_keyfile() {
+    dd bs=515 count=4 if=/dev/urandom of=/boot/keyfile.bin
+    sleep 3
+    chmod 000 /boot/keyfile.bin
+    sleep 3
+    chmod -R g-rwx,o-rwx /boot
+    sleep 3
+    LUKS_UUID=$(blkid -s UUID -o value $1)
+    echo "cryptroot UUID=${LUKS_UUID} /boot/keyfile.bin luks" > /etc/crypttab
+    echo 'install_items+=" /boot/keyfile.bin /etc/crypttab "' > /etc/dracut.conf.d/10-crypt.conf
+    sleep 3
+    ln -s /etc/sv/dhc /etc/runit/runsvdir/default
+}
+
+finalize_crypt() {
+    sleep 3
+    echo "Be ready to enter password for encrypted partition below:"
+    sleep 3
+    cryptsetup -v luksAddKey $1 /boot/keyfile.bin
+    sleep 3
+}
+
+link_services() {
+    ln -s /etc/sv/dhcpd-eth0 /var/service
+    ln -s /etc/sv/dhcpcd /var/service/
+    clear
+}
+
+xbps_reconfigure() {
+    xbps-reconfigure -fa
+    sleep 3
+    clear
+}
+
+finish() {
+    display_logo
+    echo "-----------------------------------------------"
+    echo "(9) Finishing base system setup"
+    echo "-----------------------------------------------"
+    echo "Run 'exit' and then 'reboot':"
+}
+
+run_wpa_supplicant_srv
+set_mirror
+set_timezone
+set_locale
+set_hostname
+set_root_pwd_set_sh
+add_user
+sync_repos
+populate_fstab
+install_bootloader
+link_services
+xbps_reconfigure
+finish
