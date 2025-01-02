@@ -1,2 +1,2 @@
 # void-setup
-Void Linux installation scripts
+Void Linux installation scripts.
