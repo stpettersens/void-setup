@@ -10,7 +10,7 @@ Requirements:
 
 Download a Void Linux ISO, and write it to a flash drive with a tool such
 as [Rufus](https://rufus.ie) or [RPI Imager](https://github.com/raspberrypi/rpi-imager)
-and boot into the live environment:
+OR use the ISO in a VM and boot into the live environment:
 
 > `Username: root ; Password: voidlinux`
 
