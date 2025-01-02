@@ -4,7 +4,7 @@ Void Linux installation scripts
 Requirements:
 * [Void Linux ISO](https://voidlinux.org)
 * bash (included on ISO)
-* [git](https://voidlinux.org/packages/?arch=86_64&q=git) (optional)
+* [git](https://voidlinux.org/packages/?arch=86_64&q=git)
 
 **Please note these scripts only work for x86_64 and aarch64.**
 
@@ -17,7 +17,7 @@ and boot into the live environment:
 When in the shell enter:
 > `bash`
 
-Update *xbps* package manager for live environment and install *git*:
+Update `xbps` package manager for live environment and install `git`:
 > `xbps-install -Syu xbps git`
 
 Clone this repository into root folder (no *void-setup* subdirectory):
