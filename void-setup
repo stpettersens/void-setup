@@ -272,11 +272,9 @@ if [[ $1 == "-s" || $1 == "--skip-location" ]]; then
 elif [[ $1 == "-m" || $1 == "--musl" ]]; then
     set_musl # This allows installing musl even if we run this on the glibc image.
     detect_location
-    should_prefer_english
 elif [[ $1 == "-g" || $1 == "--glibc" ]]; then
     set_glibc # This allows installing glibc even if we run this on the musl image.
     detect_location
-    should_prefer_english
 elif [[ $1 == "-sm" || $1 == "--skip-musl" ]]; then
     set_musl
     skip_location
@@ -286,8 +284,8 @@ elif [[ $1 == "-sg" || $1 == "--skip-glibc" ]]; then
 else
     detect_musl_or_glibc_image
     detect_location
-    should_prefer_english
 fi
+should_prefer_english
 set_keyboard_layout
 should_use_os_prober
 setup_void
