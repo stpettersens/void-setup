@@ -1,0 +1,298 @@
+#!/bin/bash
+# void-setup
+# Set up a Void system using chroot.
+#
+# Written by Sam Saint-Pettersen <https://stpettersen.xyz>
+#
+# Based on Jake@Linux's tutorial:
+# https://jpedmedia.com/tutorials/void_install
+#
+# Run under root user.
+# First update xbps and install git (xbps-install -Syu xbps git)
+# Usage:
+# git clone https://github.com/stpettersens/void-setup .
+# bash void-setup [--layout qwerty-en/-s|--skip-location/-m|--musl/-sm|--skip-musl/-g|--glibc/-sg|--skip-glibc]
+
+exit_if_0() {
+    if [[ $1 == "0" ]]; then
+        echo "Goodbye..."
+        exit 0
+    fi
+}
+
+setup_wifi() {
+    read -p "Set up WiFi connection? (y/n/0 to exit): " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        read -p "Enter SSID (0 to exit): " ssid
+        exit_if_0 $ssid
+        read -p "Enter password (0 to exit): " passphrase
+        exit_if_0 $passphrase
+        wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf
+        ln -s /etc/sv/wpa_supplicant /var/service
+        sleep 5
+        (echo "add_network"; echo "set_network 0 ssid \"${ssid}\""; echo "set_network 0 psk \"${passphrase}\""; echo "enable_network 0"; echo "save config") | wpa_cli
+        sleep 5
+        ping -c 5 google.com
+        sleep 5
+        echo "wifi = y" > wifi_file
+    else
+        echo "wifi = n" > wifi_file
+    fi
+    clear
+}
+
+begin_cfg() {
+    wifi=$(grep wifi wifi_file | awk '{print $3}')
+    echo "[void.cfg]" > void.cfg
+    echo "playbooks = 0.0.0.0 play.books" >> void.cfg
+    echo "wifi = ${wifi}" >> void.cfg
+    rm -f wifi_file
+    clear
+}
+
+get_architecture() {
+    return $(lscpu | grep Architecture | awk '{print $2}')
+}
+
+install_figlet_wget() {
+    xbps-install -Syu xbps figlet wget
+    clear
+}
+
+install_tiv() {
+    if [[ get_architecture != "aarch64" ]]; then
+        xbps-install -Syu tiv
+    fi
+    clear
+}
+
+display_logo() {
+    tput setaf 2 # Green banner
+    figlet "Void Linux  Setup"
+    tput setaf 7 # White text
+    echo
+    echo "Scripts written by Sam Saint-Pettersen <https://stpettersen.xyz>"
+    echo "Based on and thanks to Jake@Linux's tutorial:"
+    echo "https://jpedmedia.com/tutorials/void_install"
+    echo
+    tput setaf 1 # Red notice
+    echo
+    echo "Enter '0' at any further point to exit."
+    echo
+    tput setaf 7 # Back to white text
+}
+
+detect_musl_or_glibc_image() {
+    musl=$(xbps-uhelper arch | grep musl)
+    if ! [ -z $musl ]; then
+        echo "musl = y" >> void.cfg
+    else
+        echo "musl = n" >> void.cfg
+    fi
+    clear
+}
+
+set_musl() {
+    echo "musl = y" >> void.cfg
+}
+
+set_glibc() {
+    echo "musl = n" >> void.cfg
+}
+
+skip_location() {
+    echo "country = CDN" >> void.cfg
+    echo "city = -" >> void.cfg
+    echo "cregion = Global" >> void.cfg
+    echo "locale = en_US" >> void.cfg
+    echo "en = en_US" >> void.cfg
+    echo "dtz = UTC" >> void.cfg
+    echo "keyboard = qwerty-us" >> void.cfg
+    echo "us = qwerty-en" >> void.cfg
+    clear
+}
+
+detect_location() {
+    install_tiv
+    wget -q https://ip-locator.xyz/text/client
+    country=$(sed '1q;d' client)
+    countryn=$(sed '2q;d' client)
+    city=$(sed '4q;d' client)
+    cregion=$(sed '5q;d' client)
+    locale=$(sed '7q;d' client)
+    english=$(sed '8q;d' client)
+    dtz=$(sed '9q;d' client)
+    keyboard=$(sed '14q;d' client)
+    us=$(sed '15q;d' client)
+    echo "country = ${country}" >> void.cfg
+    echo "city = ${city}" >> void.cfg
+    echo "cregion = ${cregion}" >> void.cfg
+    echo "locale = ${locale}" >> void.cfg
+    echo "english = ${english}" >> void.cfg
+    echo "dtz = ${dtz}" >> void.cfg
+    echo "keyboard = ${keyboard}" >> void.cfg
+    echo "us = ${us}" >> void.cfg
+    rm -f client
+    if [[ get_architecture != "aarch64" ]]; then
+        wget -q https://ip-locator.xyz/flag/client
+        clear
+        tiv client -s 30
+    fi
+    echo "Detected that you are in ${city}, ${countryn} (${country})..."
+    sleep 5
+    rm -f client
+    clear
+}
+
+should_prefer_english() {
+    display_logo
+    locale=$(grep locale void.cfg | awk '{print $3}')
+    english=$(grep english void.cfg | awk '{print $3}')
+    keyboard=$(grep keyboard void.cfg | awk '{print $3}')
+    us=$(grep us void.cfg | awk '{print $3}')
+    echo
+    echo "---------------------"
+    echo "Do you speak English?"
+    echo "Parlez-vous Anglais?"
+    echo "Sprichst du Englisch?"
+    echo "----------------------"
+    echo
+    echo "Do you wish to use English as the installed locale?"
+    echo "Enter 'y' to prefer English in cultures where other languages exist"
+    read -p "(e.g. use English (en) rather than Welsh (cy) in GB) or 'en' to always use en_US) [y/n/en]?: " lang
+    exit_if_0 $lang
+    if [[ $lang == "en" ]]; then
+        sed -i "s/${locale}/en_US/" void.cfg
+        sed -i "s/${keyboard}/${us}/" void.cfg
+    elif [[ $lang == "y" ]]; then
+        sed -i "s/${locale}/${english}/" void.cfg
+    fi
+    clear
+}
+
+set_keyboard_layout() {
+    display_logo
+    locale=$(grep locale void.cfg | awk '{print $3}')
+    keyboard=$(grep keyboard void.cfg | awk '{print $3}')
+    echo
+    echo "------------------------------------"
+    echo "Set keyboard layout"
+    echo "------------------------------------"
+    echo
+    echo "Listing broad keyboard layouts:"
+    ls -l /usr/share/kbd/keymaps/i386 | awk '{print $9}'
+    echo
+    read -p "Keyboard layout is set to '${keyboard}'. Change it? (y/n)?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        old=$keyboard
+        read -p "Enter new keyboard layout: " keyboard
+        sed -i "s/${old}/${keyboard}/" void.cfg
+    fi
+    # Thanks to void-installer script and Arch wiki:
+    # https://wiki.archlinux.org/title/Linux_console/Keyboard_configuration
+    # As-is:
+    layout=$keyboard
+    if [[ $keyboard == "qwert"* || $keyboard == "azerty"* ]]; then
+        # OR if QWERTY, QWERTZ or AZERTY...
+        layout=$(cut -d'-' -f2 <<< "$keyboard")
+    fi
+    loadkeys $layout
+    clear
+}
+
+force_keyboard_layout() {
+    # As-is:
+    layout=$1
+    if [[ $1 == "qwert"* || $1 == "azerty"* ]]; then
+        # OR if QWERTY, QWERTZ or AZERTY...
+        layout=$(cut -d'-' -f2 <<< "$1")
+    fi
+    loadkeys $layout
+}
+
+should_use_os_prober() {
+    display_logo
+    echo "------------------------------------"
+    echo "Use os-prober to detect other OSes?"
+    echo "------------------------------------"
+    echo "Would you like to use OS prober with GRUB to detect other installed"
+    read -p "operating systems (y/n)?: " yn
+    exit_if_0 $yn
+    if [[ $yn == "y" ]]; then
+        echo "osprober = y" >> void.cfg
+    else
+        echo "osprober = n" >> void.cfg
+    fi
+    clear
+}
+
+setup_void() {
+    display_logo
+    echo "------------------------"
+    echo "Void Linux set up script"
+    echo "------------------------"
+    echo
+    echo "Select the type of installation:"
+    echo
+    echo "(1) Install with FAT32 boot partition and ext4 root partition."
+    echo "(2) Install with FAT32 boot partition and BTRFS root partition (with @home volume, etc)."
+    echo "(3) Install with FAT32 boot partition and BTRFS root partition as option (2), but encrypted."
+    echo
+    read -p "Select an option (1-3, 0 to quit): " option
+    case "$option" in
+    "0")
+        exit_if_0 "0"
+        ;;
+    "1")
+        bash void-setup-ext4
+        ;;
+    "2")
+        #bash void-setup-btrfs
+        clear
+        echo "BTRFS option not yet implemented. Returning to choices in 10 seconds.."
+        sleep 10
+        setup_void
+        ;;
+    "3")
+        #bash void-setup-btrfs-encrypt
+        clear
+        echo "BTRFS-ENCRYPT option not yet implemented. Returning to choices in 10 seconds..."
+        sleep 10
+        setup_void
+        ;;
+    esac
+}
+
+if [[ $1 == "--layout" ]]; then
+    force_keyboard_layout $2
+fi
+setup_wifi
+begin_cfg
+install_figlet_wget
+if [[ $1 == "-s" || $1 == "--skip-location" ]]; then
+    detect_musl_or_glibc_image
+    skip_location
+elif [[ $1 == "-m" || $1 == "--musl" ]]; then
+    set_musl # This allows installing musl even if we run this on the glibc image.
+    detect_location
+    should_prefer_english
+elif [[ $1 == "-g" || $1 == "--glibc" ]]; then
+    set_glibc # This allows installing glibc even if we run this on the musl image.
+    detect_location
+    should_prefer_english
+elif [[ $1 == "-sm" || $1 == "--skip-musl" ]]; then
+    set_musl
+    skip_location
+elif [[ $1 == "-sg" || $1 == "--skip-glibc" ]]; then
+    set_glibc
+    skip_location
+else
+    detect_musl_or_glibc_image
+    detect_location
+    should_prefer_english
+fi
+set_keyboard_layout
+should_use_os_prober
+setup_void
