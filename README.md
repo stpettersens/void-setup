@@ -8,12 +8,11 @@ Requirements:
 
 **Please note these scripts only work for x86_64 and aarch64**
 
-Download a Void Linux ISO, write to a flash drive with a tool such
+Download a Void Linux ISO, and write it to a flash drive with a tool such
 as [Rufus](https://rufus.ie) or [RPI Imager](https://github.com/raspberrypi/rpi-imager)
-and boot into the live environment
+and boot into the live environment:
 
-> `Username: root`
-> `Password: voidlinux`
+> `Username: root ; Password: voidlinux`
 
 When in the shell enter:
 > `bash`
@@ -24,7 +23,7 @@ Update *xbps* package manager for live environment and install *git*:
 Clone this repository into root folder (no *void-setup* subdirectory):
 > `git clone https://github.com/stpettersens/void-linux .`
 
-**Check the scripts if you wish for safety.**
+*Check the scripts if you wish for safety.*
 
 Start Void Linux installation:
 > `bash void-setup`
