@@ -271,8 +271,7 @@ review_mountpoints() {
 }
 
 download_repo_mirrors_file() {
-    #wget -q https://playbooks.stpettersen.xyz/void-mirrors.csv
-    echo "Got void-mirrors.csv"
+    wget -q https://playbooks.stpettersen.xyz/void-mirrors.csv
 }
 
 select_repo_mirror() {
@@ -441,7 +440,7 @@ finish() {
     fi
     cp -f /etc/resolv.conf /mnt/etc/
     cp -f void.cfg /mnt/ 2>/dev/null
-    #wget -q https://playbooks.stpettersen.xyz/void-chroot-ext4
+    wget -q https://playbooks.stpettersen.xyz/void-chroot-ext4
     cp -f void-chroot-ext4 /mnt/void-chroot-ext4
     chmod +x /mnt/void-chroot-ext4
     echo "Done. Entering the chroot environment. Run './void-chroot-ext4' to continue:"

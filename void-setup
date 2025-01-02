@@ -8,9 +8,9 @@
 # https://jpedmedia.com/tutorials/void_install
 #
 # Run under root user.
-# First update xbps and install git (xbps-install -Syu xbps git)
+# First update xbps and install wget (xbps-install -Syu xbps wget)
 # Usage:
-# git clone https://github.com/stpettersens/void-setup .
+# wget -q https://playbooks.stpettersen.xyz/void-setup
 # bash void-setup [--layout qwerty-en/-s|--skip-location/-m|--musl/-sm|--skip-musl/-g|--glibc/-sg|--skip-glibc]
 
 exit_if_0() {
@@ -246,21 +246,16 @@ setup_void() {
         exit_if_0 "0"
         ;;
     "1")
+        wget -q https://playbooks.stpettersen.xyz/void-setup-ext4
         bash void-setup-ext4
         ;;
     "2")
-        #bash void-setup-btrfs
-        clear
-        echo "BTRFS option not yet implemented. Returning to choices in 10 seconds.."
-        sleep 10
-        setup_void
+        wget -q https://playbooks.stpettersen.xyz/void-setup-btrfs > void-setup-btrfs
+        bash void-setup-btrfs
         ;;
     "3")
-        #bash void-setup-btrfs-encrypt
-        clear
-        echo "BTRFS-ENCRYPT option not yet implemented. Returning to choices in 10 seconds..."
-        sleep 10
-        setup_void
+        wget -q https://playbooks.stpettersen.xyz/void-setup-btrfs-encrypt > void-setup-btrfs-encrypt
+        bash void-setup-btrfs-encrypt
         ;;
     esac
 }
