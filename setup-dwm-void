@@ -171,7 +171,7 @@ finish() {
 install_all() {
     check_void_system
     init_dir
-    install_pacman_pkgs
+    install_xbps_pkgs
     install_git_pkgs
     install_xdeb
     install_deb_pkgs
