@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# This script installs packages necessary for a dwm environment on Void Linux.
+# Written by Sam Saint-Pettersen <s dot stpettersen at pm dot me>
+#
+# wget -q https://playbooks.stpettersen.xyz/void/setup-dwm-void
+# bash setup-dwm-void
+
+xbps_pkgs=(
+    "binutils"
+    "tar"
+    "xbps"
+    "iw"
+    "vim"
+    "mousepad"
+    "git"
+    "gcc"
+    "tcc"
+    "ldc"
+    "clang"
+    "valgrind"
+    "upx"
+    "make"
+    "libX11"
+    "libXinerama"
+    "libxcb"
+    "libXft"
+    "freetype"
+    "feh"
+    "alacritty"
+    "flameshot"
+    "dmenu"
+    "wget"
+    "curl"
+    "jq"
+    "xz"
+    "tealdeer"
+    "fastfetch"
+    "patch"
+    "keychain"
+    "keepassxc"
+    "Thunar"
+    "opendoas"
+    "pulseaudio",
+    "dunst"
+    "zellij"
+    "onefetch"
+    "ponymix"
+    "ulauncher"
+    "notepadqq"
+    "docker"
+)
+
+git_urls=(
+    "https://github.com/stpettersens/neofetch"
+    "https://github.com/dylanaraps/pfetch"
+    "https://github.com/stpettersens/dwm"
+    "https://github.com/stpettersens/dwmblocks"
+)
+
+git_pkgs=(
+    "neofetch"
+    "pfetch"
+    "dwm"
+    "dwmblocks"
+)
+
+deb_urls=(
+    "https://github.com/brave/brave-browser/releases/download/v1.80.115/brave-browser_1.80.115_amd64.deb"
+}
+
+deb_pkgs=(
+    "brave_1.80.115_amd64.deb"
+)
+
+deb_apps=(
+    "brave"
+)
+
+check_void_system() {
+    cat /etc/os-release | grep Void
+    is_void=$?
+    if [[ $is_void == 1 ]] then
+        echo "This is not a Void system."
+        echo "Aborting..."
+        exit -1
+    fi
+    clear
+}
+
+update_packages() {
+    sudo xbps-install -Syu
+}
+
+install_xbps_pkgs() {
+    for pkg in "${xbps_pkgs[@]}"
+    do
+        sudo xbps-install -Sy $pkg
+    done
+}
+
+install_git_pkgs() {
+    i=0
+    for pkg in "${git_pkgs[@]}"
+    do
+        cd ~/BuildFromSrc
+        git clone ${git_urls[$i]}
+        cd $pkg
+        # Apply patch to package's program
+        # if it exists.
+        if [-e "$pkg.diff" ]; then
+            patch $pkg < $pkg.diff
+        fi
+        if [ -f "brave.diff" && $pkg == "dwm" ]; then
+            patch config.h < brave.diff
+        fi
+        if [ -f "configure" ]; then
+            sh configure
+        fi
+        make all
+        sudo make install
+        cd ~
+        i=$((i+1))
+    done
+}
+
+install_xdeb() {
+    curl -LO https://github.com/xdeb-org/xdeb/releases/latest/download/xdeb
+    chmod 0744 xdeb-org/xdeb/releases/latest/download/xdeb
+    sudo ln -sf /usr/bin/xdeb xdeb-org/xdeb/releases/latest/download/xdeb
+}
+
+install_deb_pkgs() {
+    i=0
+    for pkg in "${deb_pkgs[@]}"
+    do
+        curl -LO ${deb_urls[$i]}
+        xdeb -Sedf $pkg
+        sudo xbps-install -Syu -R ./binpkgs ${deb_apps[$i]}
+        if [$pkg == "brave*" ]; then
+            sudo ln -sf /usr/bin/brave /usr/bin/brave-browser
+        fi
+        i=$((i+1))
+    done
+}
+
+tealdeer_update_cache() {
+    tldr --update
+}
+
+log_source_pkgs() {
+    mkdir -p ~/.s
+    for pkg in "${git_pkgs[@]}"
+    do
+        touch ~/.s/$pkg
+    done
+}
+
+create_doas_file() {
+    echo "permit nopass :wheel" | sudo tee /etc/doas.conf
+}
+
+init_dir() {
+    cd ~
+    mkdir -p ~/BuildFromSrc
+}
+
+finish() {
+    echo "Installed all, done."
+}
+
+install_all() {
+    check_void_system
+    init_dir
+    install_pacman_pkgs
+    install_git_pkgs
+    install_xdeb
+    install_deb_pkgs
+    tealdeer_update_cache
+    log_source_pkgs
+    create_doas_file
+    finish
+}
+
+install_all
