@@ -64,18 +64,6 @@ git_pkgs=(
     "dwmblocks"
 )
 
-deb_urls=(
-    "https://github.com/brave/brave-browser/releases/download/v1.80.120/brave-browser_1.80.120_amd64.deb"
-}
-
-deb_pkgs=(
-    "brave_1.80.120_amd64.deb"
-)
-
-deb_apps=(
-    "brave"
-)
-
 check_void_system() {
     cat /etc/os-release | grep Void
     is_void=$?
@@ -129,18 +117,26 @@ install_xdeb() {
     sudo ln -sf /usr/bin/xdeb xdeb-org/xdeb/releases/latest/download/xdeb
 }
 
-install_deb_pkgs() {
-    i=0
-    for pkg in "${deb_pkgs[@]}"
-    do
-        curl -LO ${deb_urls[$i]}
-        xdeb -Sedf $pkg
-        sudo xbps-install -Syu -R ./binpkgs ${deb_apps[$i]}
-        if [$pkg == "brave*" ]; then
-            sudo ln -sf /usr/bin/brave /usr/bin/brave-browser
-        fi
-        i=$((i+1))
-    done
+install_latest_brave_deb() {
+	# Get machine architecture.
+	arch=$(uname -m)
+	if [ $arch == "x86_64" ]; then
+		arch="amd64"
+	elif [ $arch == "aarch64" ]; then
+		arch="arm64"
+	fi
+
+	wget -q https://brave.com/latest/index.xml
+	vers=$(grep "<title>Release Notes v" index.xml | head -n 1 | awk '{ print $3 }')
+    vers=${vers::-8}
+    v=${vers:1}
+
+    wget -q "https://github.com/brave/brave-browser/releases/download/${vers}/brave-browser_${v}_${arch}.deb"
+
+    xdeb -Sedf brave-browser_${vers}_${arch}.deb
+    sudo xbps-install -Syu -R ./binpkgs brave-browser
+    sudo ln -sf /usr/bin/brave /usr/bin/brave-browser
+    rm -f index.xml
 }
 
 tealdeer_update_cache() {
@@ -174,7 +170,7 @@ install_all() {
     install_xbps_pkgs
     install_git_pkgs
     install_xdeb
-    install_deb_pkgs
+    install_latest_brave_deb
     tealdeer_update_cache
     log_source_pkgs
     create_doas_file
