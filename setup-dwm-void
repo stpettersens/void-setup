@@ -172,7 +172,7 @@ add_xrandr_line_on_vm() {
     sudo dmesg | grep -i hypervisor
     is_vm=$?
     if [[ $is_vm == 0 ]] then
-        sed '5s/$/ xrander set 1920x1080 &/' ~/.xinitrc
+        sed '5s/$/ xrander -s 1920x1080 &/' ~/.xinitrc
         cp ~/.xinitrc ~/.xsession
     fi
 }
