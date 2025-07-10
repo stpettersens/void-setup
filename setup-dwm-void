@@ -6,6 +6,7 @@
 # bash setup-dwm-void
 
 xbps_pkgs=(
+    "ntp"
     "binutils"
     "bind-utils"
     "pam-devel"
