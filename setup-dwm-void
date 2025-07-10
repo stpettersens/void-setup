@@ -8,6 +8,11 @@
 xbps_pkgs=(
     "binutils"
     "bind-utils"
+    "pam-devel"
+    "btop"
+    "htop"
+    "eza"
+    "7zip"
     "tar"
     "xbps"
     "iw"
