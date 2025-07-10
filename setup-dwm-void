@@ -118,8 +118,8 @@ install_git_pkgs() {
 
 install_xdeb() {
     curl -LO https://github.com/xdeb-org/xdeb/releases/latest/download/xdeb
-    chmod a+x xdeb-org/xdeb/releases/latest/download/xdeb
-    sudo ln -sf /usr/bin/xdeb xdeb-org/xdeb/releases/latest/download/xdeb
+    chmod a+x xdeb
+    sudo ln -sf /usr/bin/xdeb xdeb
 }
 
 install_latest_brave_deb() {
@@ -131,17 +131,18 @@ install_latest_brave_deb() {
 		arch="arm64"
 	fi
 
+    # Get latest brave version.
 	wget -q https://brave.com/latest/index.xml
 	vers=$(grep "<title>Release Notes v" index.xml | head -n 1 | awk '{ print $3 }')
     vers=${vers::-8}
     v=${vers:1}
+    rm -f index.xml
 
     wget -q "https://github.com/brave/brave-browser/releases/download/${vers}/brave-browser_${v}_${arch}.deb"
 
     xdeb -Sedf brave-browser_${vers}_${arch}.deb
     sudo xbps-install -Syu -R ./binpkgs brave-browser
     sudo ln -sf /usr/bin/brave /usr/bin/brave-browser
-    rm -f index.xml
 }
 
 tealdeer_update_cache() {
