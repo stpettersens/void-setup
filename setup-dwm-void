@@ -21,10 +21,15 @@ xbps_pkgs=(
     "upx"
     "make"
     "libX11"
+    "libX11-devel"
     "libXinerama"
+    "libXinerama-devel"
     "libxcb"
+    "libxcb-devel"
     "libXft"
+    "libXft-devel"
     "freetype"
+    "freetype-devel"
     "feh"
     "alacritty"
     "flameshot"
@@ -113,7 +118,7 @@ install_git_pkgs() {
 
 install_xdeb() {
     curl -LO https://github.com/xdeb-org/xdeb/releases/latest/download/xdeb
-    chmod 0744 xdeb-org/xdeb/releases/latest/download/xdeb
+    chmod a+x xdeb-org/xdeb/releases/latest/download/xdeb
     sudo ln -sf /usr/bin/xdeb xdeb-org/xdeb/releases/latest/download/xdeb
 }
 
