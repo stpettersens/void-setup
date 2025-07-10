@@ -20,6 +20,8 @@ xbps_pkgs=(
     "valgrind"
     "upx"
     "make"
+    "xorg"
+    "xinit"
     "libX11"
     "libX11-devel"
     "libXinerama"
@@ -119,7 +121,7 @@ install_git_pkgs() {
 install_xdeb() {
     wget -q https://github.com/xdeb-org/xdeb/releases/latest/download/xdeb
     chmod a+x xdeb
-    sudo ln -sf xdeb /usr/bin/xdeb
+    sudo ln -sf ~/xdeb /usr/bin/xdeb
 }
 
 install_latest_brave_deb() {
@@ -131,18 +133,18 @@ install_latest_brave_deb() {
 		arch="arm64"
 	fi
 
-    # Get latest brave version.
+    # Get latest Brave version.
 	wget -q https://brave.com/latest/index.xml
 	vers=$(grep "<title>Release Notes v" index.xml | head -n 1 | awk '{ print $3 }')
     vers=${vers::-8}
     v=${vers:1}
     rm -f index.xml
-
     wget -q "https://github.com/brave/brave-browser/releases/download/${vers}/brave-browser_${v}_${arch}.deb"
 
+    # Convert Debian package to XBPS installable package and install it.
     xdeb -Sedf brave-browser_${v}_${arch}.deb
     sudo xbps-install -Syu -R ./binpkgs brave-browser
-    sudo ln -sf /usr/bin/brave-browser /usr/bin/brave
+    sudo ln -sf /usr/bin/brave-browser-stable /usr/bin/brave
 }
 
 tealdeer_update_cache() {
