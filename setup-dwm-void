@@ -65,11 +65,11 @@ git_pkgs=(
 )
 
 deb_urls=(
-    "https://github.com/brave/brave-browser/releases/download/v1.80.115/brave-browser_1.80.115_amd64.deb"
+    "https://github.com/brave/brave-browser/releases/download/v1.80.120/brave-browser_1.80.120_amd64.deb"
 }
 
 deb_pkgs=(
-    "brave_1.80.115_amd64.deb"
+    "brave_1.80.120_amd64.deb"
 )
 
 deb_apps=(
