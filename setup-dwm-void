@@ -134,18 +134,18 @@ install_xdeb() {
 }
 
 install_latest_brave_deb() {
-	# Get machine architecture.
-	arch=$(uname -m)
-	if [ $arch == "x86_64" ]; then
-		arch="amd64"
-	elif [ $arch == "aarch64" ]; then
-		arch="arm64"
-	fi
+    # Get machine architecture.
+    arch=$(uname -m)
+    if [ $arch == "x86_64" ]; then
+        arch="amd64"
+    elif [ $arch == "aarch64" ]; then
+        arch="arm64"
+    fi
 
     # Get latest Brave version.
     echo "Downloading latest stable version of Brave..."
-	wget -q https://brave.com/latest/index.xml
-	vers=$(grep "<title>Release Notes v" index.xml | head -n 1 | awk '{ print $3 }')
+    wget -q https://brave.com/latest/index.xml
+    vers=$(grep "<title>Release Notes v" index.xml | head -n 1 | awk '{ print $3 }')
     vers=${vers::-8}
     v=${vers:1}
     rm -f index.xml
