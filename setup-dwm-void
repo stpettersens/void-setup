@@ -7,6 +7,7 @@
 
 xbps_pkgs=(
     "binutils"
+    "bind-utils"
     "tar"
     "xbps"
     "iw"
@@ -49,7 +50,7 @@ xbps_pkgs=(
     "keepassxc"
     "Thunar"
     "opendoas"
-    "pulseaudio",
+    "pulseaudio"
     "dunst"
     "zellij"
     "onefetch"
