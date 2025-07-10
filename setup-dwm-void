@@ -12,6 +12,7 @@ xbps_pkgs=(
     "iw"
     "vim"
     "mousepad"
+    "bat"
     "git"
     "gcc"
     "tcc"
