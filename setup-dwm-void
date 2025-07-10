@@ -194,6 +194,7 @@ finish() {
 
 install_all() {
     check_void_system
+    update_packages
     init_dir
     install_xbps_pkgs
     install_git_pkgs
