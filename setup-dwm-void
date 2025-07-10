@@ -22,6 +22,7 @@ xbps_pkgs=(
     "make"
     "xorg"
     "xinit"
+    "picom"
     "libX11"
     "libX11-devel"
     "libXinerama"
