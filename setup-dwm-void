@@ -144,11 +144,10 @@ install_latest_brave_deb() {
 
     # Get latest Brave version.
     echo "Downloading latest stable version of Brave..."
-    wget -q https://brave.com/latest/index.xml
-    vers=$(grep "<title>Release Notes v" index.xml | head -n 1 | awk '{ print $3 }')
-    vers=${vers::-8}
+    wget -q https://github.com/brave/brave-browser/releases.atom
+    vers=$(grep "<title>Release v" releases.atom | awk '{ print $2 }')
     v=${vers:1}
-    rm -f index.xml
+    rm -f releases.atom
     wget -q "https://github.com/brave/brave-browser/releases/download/${vers}/brave-browser_${v}_${arch}.deb"
 
     # Convert Debian package to XBPS installable package and install it.
