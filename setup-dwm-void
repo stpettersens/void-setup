@@ -145,7 +145,7 @@ install_latest_brave_deb() {
     # Get latest Brave version.
     echo "Downloading latest stable version of Brave..."
     curl "https://api.github.com/repos/brave/brave-browser/releases?per_page=100&page=1" > releases.json
-    vers=$(grep "Release v" releases.json | head -n 1 | awk '{ print $3 }')
+    vers=$(grep "Release" releases.json | head -n 1 | awk '{ print $3 }')
     v=${vers:1}
     rm -f releases.json
     wget -q "https://github.com/brave/brave-browser/releases/download/${vers}/brave-browser_${v}_${arch}.deb"
