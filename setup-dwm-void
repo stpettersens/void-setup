@@ -15,7 +15,6 @@ xbps_pkgs=(
     "eza"
     "7zip"
     "tar"
-    "xbps"
     "iw"
     "vim"
     "mousepad"
@@ -89,6 +88,10 @@ check_void_system() {
         exit -1
     fi
     clear
+}
+
+update_xbps() {
+    sudo xbps-install -u xbps
 }
 
 update_packages() {
@@ -193,6 +196,7 @@ finish() {
 
 install_all() {
     check_void_system
+    update_xbps
     update_packages
     init_dir
     install_xbps_pkgs
