@@ -6,6 +6,8 @@
 # bash setup-dwm-void
 
 xbps_pkgs=(
+    "xorg"
+    "xauth"
     "ntp"
     "binutils"
     "bind-utils"
