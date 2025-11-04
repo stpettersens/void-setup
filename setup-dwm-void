@@ -134,32 +134,15 @@ install_git_pkgs() {
 
 install_xdeb() {
     wget -q https://github.com/xdeb-org/xdeb/releases/latest/download/xdeb
-    chmod a+x xdeb
-    sudo ln -sf ~/xdeb /usr/bin/xdeb
+    sudo mv xdeb /usr/local/bin
+    sudo chmod a+x xdeb
 }
 
-install_latest_brave_deb() {
-    # Get machine architecture.
-    arch=$(uname -m)
-    if [ $arch == "x86_64" ]; then
-        arch="amd64"
-    elif [ $arch == "aarch64" ]; then
-        arch="arm64"
-    fi
-
-    # Get latest Brave version.
-    echo "Downloading latest stable version of Brave..."
-    curl "https://api.github.com/repos/brave/brave-browser/releases?per_page=100&page=1" > releases.json
-    vers=$(grep "Release" releases.json | head -n 1 | awk '{ print $3 }')
-    v=${vers:1}
-    rm -f releases.json
-    wget "https://github.com/brave/brave-browser/releases/download/${vers}/brave-browser_${v}_${arch}.deb"
-
-    # Convert Debian package to XBPS installable package and install it.
-    echo "Installing Brave..."
-    xdeb -Sedf brave-browser_${v}_${arch}.deb
-    sudo xbps-install -Syu -R ./binpkgs brave-browser
-    sudo ln -sf /usr/bin/brave-browser-stable /usr/bin/brave
+install_latest_brave() {
+    mkdir -p ~/bin
+    curl -LsSf https://gist.githubusercontent.com/stpettersens/ee8821ba1d6d45937b3eb0c841335cb7/raw/c74a15dc81075e2d096f99ec011d2b9f66f6678f/update-brave-void.sh > ~/bin/update-brave-void.sh
+    chmod a+x ~/bin/update-brave-void.sh
+    ~/bin/update-brave-void.sh
 }
 
 tealdeer_update_cache() {
@@ -204,7 +187,7 @@ install_all() {
     install_xbps_pkgs
     install_git_pkgs
     install_xdeb
-    install_latest_brave_deb
+    install_latest_brave
     tealdeer_update_cache
     log_source_pkgs
     create_doas_file
